@@ -1,0 +1,186 @@
+---
+title: "xseq -- Assessing Functional Impact on Gene Expression of Mutations in Cancer"
+author: "Jiarui Ding, Sohrab Shah"
+date: "`r Sys.Date()`"
+#output: rmarkdown::html_vignette
+output:  pdf_document
+theme: cerulean
+vignette: >
+  %\VignetteIndexEntry{xseq -- Assessing Functional Impact on Gene Expression of Mutations in Cancer}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+<!-- Introduction --> 
+# Introduction
+
+<!We have assessed the impact of mutations on gene expression as a means of quantifying potential phenotypic effects, and for novel cancer gene discovery. -->
+The xseq model specifies how the expression $Y$ of a group of genes in a patient is influenced by the somatic mutation status of a gene $g$ in the patient. The main question we address is whether gene $g$ co-associates with disrupted expression to itself or its connected genes as defined by an influence graph.
+This concept is motivated by biological hypotheses predicting that some functional mutations will exhibit a ``transcriptional shadow'', resulting from a mechanistic impact on the gene expression profile of a tumour. 
+For example, loss-of-function mutations (nonsense mutations, frame-shifting indels, splice-site mutations or homozygous copy number deletions) occurring in tumour suppressor genes like \textit{TP53} can cause loss of expression due to nonsense-mediated mRNA decay or gene dosage effects. 
+In this context, we define  a \emph{cis-effect} as a genetic or epigenetic aberration that results in up-regulation or down-regulation of the gene itself. 
+In contrast, some mutations can disrupt the expression of other genes in the same biochemical pathway (\emph{trans-effects}). 
+This class of mutations tends to cast a long transcriptional shadow over many genes across the genome. 
+$\beta$-catenin (\textit{CTNNB1}) mutations, which drive constitutive activation of Wnt signalling in several cancer types, are a potent example of mutational impact on gene expression. 
+
+
+# Inputs
+The \texttt{xseq} model is predicated on the idea that mutations with functional effects on transcription will exhibit measurable signals in mRNA transcripts biochemically related to the mutated gene \textendash thus imposing a transcriptional shadow across part (or all) of a pathway. 
+To infer this property, three key inputs are required for the model: 
+a patient-gene matrix encoding the presence/absence of a mutation (any form of somatic genomic aberrations that can be ascribed to a gene, e.g., SNVs, indels, or copy number alterations); 
+a patient-gene expression matrix encoding continuous value expression data (e.g., from RNASeq or microarrays); 
+and a graph structure encoding whether two genes are known to be functionally related (e.g., obtained through literature, databases, or co-expression data). 
+\texttt{xseq} uses a precomputed `influence graph' as a means to incorporate prior gene-gene relationship knowledge into its modelling framework. 
+For analysis of mutation impact in-\emph{cis}, the graph reduces to the simple case where the mutated gene is only connected to itself. 
+
+
+```{r, eval=TRUE, warning=FALSE}
+library(xseq)
+data(mut, expr, cna.call, cna.logr, net)
+
+mut[1:5,1:5]
+expr[1:5,1:5]
+cna.call[1:5,1:5]
+cna.logr[1:5,1:5]
+net[1:2]
+```
+
+
+<!-- Introduction --> 
+# Cis-analysis
+
+We first analyze the cis-effects of loss-of-function mutations (frameshift, nonsense and splice-site mutations) on gene expression. 
+
+```{r, eval=TRUE, warning=FALSE}
+# Compute whether a gene is expressed in the studied tumour type. 
+# If the expression data are from microarray, there is not need to compute weights. 
+weight    = EstimateExpression(expr)
+
+# Impute missing values
+expr      = ImputeKnn(expr)
+cna.logr  = ImputeKnn(cna.logr)
+
+# Quantile-Normalization
+expr.quantile = QuantileNorm(expr)
+```
+
+```{r, eval=TRUE, warning=FALSE, fig.width=7.5, fig.height=7.5}
+#=========================================================================================
+## Get the conditional distritions P(Y|G)
+# 
+# We first show TP53 mutations, expression, and copy number alterations
+tmp  = GetExpressionDistribution(expr=expr.quantile, mut=mut, cna.call=cna.call, 
+                                 gene="TP53", show.plot=TRUE)
+
+expr.dis.quantile  = GetExpressionDistribution(expr=expr.quantile, mut=mut)
+```
+
+```{r, eval=TRUE, warning=FALSE}
+#=========================================================================================
+## Filtering not expressed genes, and only analyzing loss-of-function
+## Mutations
+##
+id = weight[mut[, "hgnc_symbol"]] >= 0.8 & 
+     (mut[, "variant_type"] %in% c("FRAMESHIFT", "NONSENSE", "SPLICE"))
+id = id & !is.na(id)
+mut.filt = mut[id, ]
+
+
+#=========================================================================================
+init = SetXseqPrior(expr.dis = expr.dis.quantile, 
+                mut      = mut.filt, 
+                mut.type = "loss",
+                cis      = TRUE)
+
+# Parameter constraints in EM-iterations
+constraint  = list(equal.fg=FALSE)
+
+model.cis = InitXseqModel(mut            = mut.filt, 
+                          expr           = expr.quantile,
+                          expr.dis       = expr.dis.quantile, 
+                          cpd            = init$cpd,
+                          cis            = TRUE, 
+                          prior          = init$prior)
+
+model.cis.em = LearnXseqParameter(model      = model.cis, 
+                                  constraint = constraint, 
+                                  iter.max   = 50, 
+                                  threshold  = 1e-6)
+
+xseq.pred = ConvertXseqOutput(model.cis.em$posterior)
+xseq.pred[1:20,]
+```
+
+
+# Trans-analysis
+
+```{r, eval=TRUE, warning=FALSE}
+#=========================================================================================
+## Remove the cis-effects of copy number alterations on gene expression
+#
+# We show an example: PTEN copy number alterations and expression in AML
+tmp = NormExpr(cna.logr=cna.logr, expr=expr, gene="TP53", show.plot=TRUE)
+
+expr.norm = NormExpr(cna.logr=cna.logr, expr=expr)
+expr.norm.quantile = QuantileNorm(expr.norm)
+
+#=========================================================================================
+## Get the conditional distritions P(Y|G), 
+# 
+expr.dis.norm.quantile  = GetExpressionDistribution(expr=expr.norm.quantile, 
+                                                    mut=mut)
+
+
+#=========================================================================================
+## 
+## Filtering not expressed genes
+##
+
+id = weight[mut[, "hgnc_symbol"]] >= 0.8
+id = id & !is.na(id)
+mut.filt = mut[id, ]
+
+
+#=========================================================================================
+# Filter the network 
+net.filt = FilterNetwork(net=net, weight=weight)
+
+init = SetXseqPrior(expr.dis = expr.dis.norm.quantile, 
+                net      = net.filt, 
+                mut      = mut.filt, 
+                mut.type = "both",
+                cis      = FALSE)
+
+# parameter constraints in EM-iterations
+constraint  = list(equal.fg=TRUE, baseline=init$baseline)
+
+model.trans = InitXseqModel(mut        = mut.filt, 
+                            expr       = expr.norm.quantile,
+                            net        = net.filt, 
+                            expr.dis   = expr.dis.norm.quantile, 
+                            cpd        = init$cpd,
+                            cis        = FALSE, 
+                            prior      = init$prior)
+
+## EM algorithm for parameter estimations
+model.trans.em = LearnXseqParameter(model      = model.trans, 
+                                    constraint = constraint, 
+                                    iter.max   = 50, 
+                                    threshold  = 1e-6)
+
+
+#=========================================================================================
+# Reformat output
+
+xseq.pred = ConvertXseqOutput(model.trans.em$posterior)
+xseq.pred[1:20, ]
+```
+
+
+```{r, eval=TRUE, warning=FALSE, fig.width = 7.5, fig.height = 7.5}
+# We finally show the dysregulation probabilites of genes connected to TP53
+tmp = PlotRegulationHeatmap(gene="TP53", posterior=model.trans.em$posterior, main="in_AML",
+                     mut=mut, subtype=list(NULL), key=FALSE, dendrogram="row")
+```
+
+

@@ -1,0 +1,25 @@
+Package: xseq
+Title: Assessing Functional Impact on Gene Expression of Mutations in Cancer
+Version: 0.2.1
+Date: 2015-08-25
+Author: Jiarui Ding, Sohrab Shah
+Maintainer: Jiarui Ding <jiaruid@cs.ubc.ca>
+Depends: R (>= 3.1.0)
+Imports: 
+  e1071 (>= 1.6-4),
+  gptk (>= 1.08),
+  impute (>= 1.38.1),
+  limma (>= 3.20.9),
+  preprocessCore (>= 1.26.1),
+  RColorBrewer (>= 1.1-2),
+  sfsmisc (>= 1.0-27)
+Suggests: 
+  limma (>= 3.24.15)
+Description: A hierarchical Bayesian approach to assess functional impact of mutations on gene expression in cancer. Given a patient-gene matrix encoding the presence/absence of a mutation, a patient-gene expression matrix encoding continuous value expression data, and a graph structure encoding whether two genes are known to be functionally related, xseq outputs: a) the probability that a recurrently mutated gene g influences gene expression across the population of patients; 
+  and b) the probability that an individual mutation in gene g in an individual patient m influences expression within that patient. 
+License: GPL (>= 2)
+LazyLoad: ture
+Packaged: 2015-08-25 07:10:53 UTC; jding
+Suggests: knitr
+VignetteBuilder: knitr
+LazyData: TRUE
