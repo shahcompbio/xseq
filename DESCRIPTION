@@ -1,6 +1,6 @@
 Package: xseq
 Title: Assessing Functional Impact on Gene Expression of Mutations in Cancer
-Version: 0.2.1
+Version: 0.2.2
 Date: 2015-08-25
 Author: Jiarui Ding, Sohrab Shah
 Maintainer: Jiarui Ding <jiaruid@cs.ubc.ca>
