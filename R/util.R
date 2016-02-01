@@ -357,7 +357,12 @@ FilterNetwork = function(net, mut, expr, gene, sample, weight, min.weight=0.8,
   
   net.new = lapply(names(pvalue), function(z) {
     if (all(is.na(pvalue[[z]]))) {
-      return(net[[z]])
+      z = net[[z]]
+      
+      if (length(z) > max.num.conn) {
+        z = z[1:max.num.conn]
+      }
+      return(z)
     }
     
     pvalue.adjust = p.adjust(sort(pvalue[[z]]), "BH")
@@ -369,6 +374,10 @@ FilterNetwork = function(net, mut, expr, gene, sample, weight, min.weight=0.8,
       z[z >= 0] = 1
     } else {
       z = net[[z]]
+    }
+    
+    if (length(z) > max.num.conn) {
+      z = z[1:max.num.conn]
     }
     
     return(z)
